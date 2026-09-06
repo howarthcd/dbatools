@@ -723,8 +723,8 @@ SELECT 'áéíñóú¡¿' as SampleUTF8;"
             $routeText = InModuleScope dbatools -Parameters @{ DatabaseName = $dbname; Instance = $TestConfig.InstanceMulti1 } {
                 $server = Connect-DbaInstance -SqlInstance $Instance
                 $db = $server.Databases[$DatabaseName]
-                $familyGuidRow = @($db.Query("DBCC DBINFO WITH TABLERESULTS") | Where-Object Field -eq "dbi_familyGUID")
-                $familyGuid = [guid]$familyGuidRow[0].VALUE
+                $familyGuidRow = @($db.Query("SELECT family_guid FROM sys.database_recovery_status WHERE database_id = DB_ID()"))
+                $familyGuid = [guid]$familyGuidRow[0].family_guid
                 $encryptedId = @(@($db.Query("SELECT m.object_id AS ObjectId FROM sys.sql_modules AS m WHERE m.definition IS NULL")) | ForEach-Object { [int]$PSItem.ObjectId })
 
                 $result = @{ }
@@ -773,8 +773,8 @@ SELECT 'áéíñóú¡¿' as SampleUTF8;"
             $scanText = InModuleScope dbatools -Parameters @{ DatabaseName = $dbname; Instance = $TestConfig.InstanceMulti1 } {
                 $server = Connect-DbaInstance -SqlInstance $Instance
                 $db = $server.Databases[$DatabaseName]
-                $familyGuidRow = @($db.Query("DBCC DBINFO WITH TABLERESULTS") | Where-Object Field -eq "dbi_familyGUID")
-                $familyGuid = [guid]$familyGuidRow[0].VALUE
+                $familyGuidRow = @($db.Query("SELECT family_guid FROM sys.database_recovery_status WHERE database_id = DB_ID()"))
+                $familyGuid = [guid]$familyGuidRow[0].family_guid
 
                 $encryptedId = @($db.Query("SELECT m.object_id AS ObjectId FROM sys.sql_modules AS m WHERE m.definition IS NULL")) | ForEach-Object { [int]$PSItem.ObjectId }
 

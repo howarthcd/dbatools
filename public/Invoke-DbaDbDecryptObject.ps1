@@ -305,8 +305,9 @@ function Invoke-DbaDbDecryptObject {
                         Stop-Function -Message "Reading the encrypted objects on $instance without a dedicated admin connection uses DBCC PAGE, which $azurePlatform does not support." -Target $instance -Continue
                     }
 
-                    # DBCC PAGE and DBCC DBINFO are limited to sysadmin, so checking up front gives a clear
-                    # message instead of a permission error in the middle of reading the pages.
+                    # DBCC PAGE is limited to sysadmin, so checking up front gives a clear message instead of
+                    # a permission error in the middle of reading the pages. sys.database_recovery_status, which
+                    # supplies the family GUID, needs only VIEW SERVER STATE, which a sysadmin already holds.
                     $querySysadmin = @"
 SELECT IS_SRVROLEMEMBER('sysadmin') AS IsSysadmin
 "@
@@ -450,16 +451,21 @@ AND p.is_ms_shipped = 0
                             $familyGuid = $null
                             $imageValueMap = @{ }
 
+                            # The family GUID comes from the catalog view sys.database_recovery_status, a typed
+                            # uniqueidentifier present since SQL Server 2005, rather than by scraping dbi_familyGUID
+                            # out of DBCC DBINFO's text dump. The two were measured byte for byte across SQL Server
+                            # 2019, 2022 and 2025, for user databases and master, and always agree, so the swap keeps
+                            # the keystream input identical while dropping a trace flag toggle and a regex over prose.
                             try {
-                                $familyGuidRow = @($db.Query("DBCC DBINFO WITH TABLERESULTS") | Where-Object Field -eq "dbi_familyGUID")
+                                $familyGuidRow = @($db.Query("SELECT family_guid FROM sys.database_recovery_status WHERE database_id = DB_ID()"))
                             } catch {
-                                Stop-Function -Message "Couldn't read dbi_familyGUID of database $($db.Name) on $instance" -ErrorRecord $_ -Target $instance -Continue
+                                Stop-Function -Message "Couldn't read the family GUID of database $($db.Name) on $instance" -ErrorRecord $_ -Target $instance -Continue
                             }
 
-                            if ($familyGuidRow.Count -eq 0) {
-                                Stop-Function -Message "Couldn't read dbi_familyGUID of database $($db.Name) on $instance" -Target $instance -Continue
+                            if ($familyGuidRow.Count -eq 0 -or $null -eq $familyGuidRow[0].family_guid -or $familyGuidRow[0].family_guid -is [System.DBNull]) {
+                                Stop-Function -Message "Couldn't read the family GUID of database $($db.Name) on $instance" -Target $instance -Continue
                             }
-                            $familyGuid = [guid]$familyGuidRow[0].VALUE
+                            $familyGuid = [guid]$familyGuidRow[0].family_guid
 
                             $wantedObjectId = @($objectCollection.ID)
 
